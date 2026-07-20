@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#1a1d29">
+<meta name="apple-mobile-web-app-title" content="週予算">
+<title>週予算メモ</title>
+<style>
+  :root {
+    --bg: #1a1d29;
+    --card: #252938;
+    --card2: #2e3347;
+    --text: #eef0f6;
+    --muted: #9aa1b5;
+    --accent: #5b8def;
+    --good: #4cc38a;
+    --warn: #e5a13a;
+    --bad: #e5636f;
+    --radius: 16px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    display: flex;
+    flex-direction: column;
+    max-width: 480px;
+    margin: 0 auto;
+    padding: max(12px, env(safe-area-inset-top)) 14px max(12px, env(safe-area-inset-bottom));
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* ===== 残高表示 ===== */
+  .balance-card {
+    background: var(--card);
+    border-radius: var(--radius);
+    padding: 18px 20px 14px;
+    text-align: center;
+    position: relative;
+  }
+  .balance-label { font-size: 13px; color: var(--muted); }
+  .balance {
+    font-size: 44px;
+    font-weight: 700;
+    line-height: 1.2;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.5px;
+  }
+  .balance.ok { color: var(--good); }
+  .balance.low { color: var(--warn); }
+  .balance.over { color: var(--bad); }
+  .sub-info { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .gear {
+    position: absolute; top: 12px; right: 12px;
+    background: none; border: none; font-size: 20px; color: var(--muted);
+    padding: 6px; cursor: pointer;
+  }
+
+  /* ===== 入力中の金額 ===== */
+  .pending-area {
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin: 6px 0;
+  }
+  .pending-amount {
+    font-size: 30px;
+    font-weight: 700;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+    min-width: 120px;
+    text-align: center;
+  }
+  .pending-hint { font-size: 12px; color: var(--muted); text-align: center; }
+  .pending-bar {
+    position: absolute;
+    bottom: 0; left: 0;
+    height: 3px;
+    background: var(--accent);
+    border-radius: 2px;
+    width: 0%;
+  }
+  .pending-wrap {
+    position: relative;
+    background: var(--card2);
+    border-radius: 12px;
+    padding: 8px 18px 10px;
+    overflow: hidden;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+  }
+  .pending-wrap.show { display: flex; }
+  .cancel-pending {
+    background: none; border: 1.5px solid var(--muted); color: var(--muted);
+    border-radius: 10px; padding: 10px 14px; font-size: 14px; cursor: pointer;
+    display: none;
+  }
+  .cancel-pending.show { display: block; }
+
+  /* ===== 金額ボタン ===== */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+  .amt-btn {
+    background: var(--card);
+    border: none;
+    border-radius: var(--radius);
+    color: var(--text);
+    font-size: 22px;
+    font-weight: 600;
+    padding: 20px 0;
+    cursor: pointer;
+    font-variant-numeric: tabular-nums;
+    transition: transform 0.05s;
+  }
+  .amt-btn:active { transform: scale(0.95); background: var(--card2); }
+  .amt-btn small { font-size: 13px; color: var(--muted); font-weight: 400; }
+  .amt-btn.wide { grid-column: 1 / -1; }
+
+  /* ===== 取消トースト ===== */
+  .toast {
+    position: fixed;
+    left: 50%;
+    bottom: max(20px, env(safe-area-inset-bottom));
+    transform: translateX(-50%) translateY(120%);
+    background: var(--card2);
+    border-radius: 14px;
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.4);
+    transition: transform 0.25s;
+    z-index: 50;
+    white-space: nowrap;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+  .toast button {
+    background: var(--accent); border: none; color: #fff;
+    border-radius: 10px; padding: 8px 16px; font-size: 15px; font-weight: 600; cursor: pointer;
+  }
+
+  /* ===== 履歴 ===== */
+  .history-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin: 16px 2px 8px;
+  }
+  .history-head h2 { font-size: 14px; color: var(--muted); font-weight: 600; }
+  .history-head span { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .history { flex: 1; overflow-y: auto; min-height: 60px; }
+  .h-item {
+    display: flex; justify-content: space-between; align-items: center;
+    background: var(--card);
+    border-radius: 12px;
+    padding: 10px 14px;
+    margin-bottom: 6px;
+    font-size: 15px;
+  }
+  .h-item .when { color: var(--muted); font-size: 13px; }
+  .h-item .amt { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .h-item .amt.charge { color: var(--good); }
+  .h-item .del {
+    background: none; border: none; color: var(--muted);
+    font-size: 17px; padding: 4px 2px 4px 12px; cursor: pointer;
+  }
+  .empty { text-align: center; color: var(--muted); font-size: 13px; padding: 20px 0; }
+
+  /* ===== 設定 ===== */
+  dialog {
+    background: var(--card);
+    color: var(--text);
+    border: none;
+    border-radius: var(--radius);
+    padding: 22px;
+    width: min(90vw, 360px);
+    margin: auto;
+  }
+  dialog::backdrop { background: rgba(0,0,0,0.6); }
+  dialog h2 { font-size: 17px; margin-bottom: 16px; }
+  .field { margin-bottom: 16px; }
+  .field label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+  .field input {
+    width: 100%;
+    background: var(--card2);
+    border: 1px solid #3a405a;
+    border-radius: 10px;
+    color: var(--text);
+    font-size: 18px;
+    padding: 10px 12px;
+  }
+  .field .note { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .dialog-btns { display: flex; gap: 10px; margin-top: 6px; }
+  .dialog-btns button {
+    flex: 1; border: none; border-radius: 12px; padding: 12px; font-size: 15px; font-weight: 600; cursor: pointer;
+  }
+  .btn-save { background: var(--accent); color: #fff; }
+  .btn-close { background: var(--card2); color: var(--text); }
+</style>
+</head>
+<body>
+
+<div class="balance-card">
+  <div class="balance-label">残り予算</div>
+  <div class="balance ok" id="balance">¥25,000</div>
+  <div class="sub-info" id="subInfo"></div>
+  <button class="gear" id="gearBtn" aria-label="設定">⚙︎</button>
+</div>
+
+<div class="pending-area">
+  <div class="pending-wrap" id="pendingWrap">
+    <div class="pending-amount" id="pendingAmt">¥0</div>
+    <div class="pending-hint">まもなく記録します(タップで追加合算)</div>
+    <div class="pending-bar" id="pendingBar"></div>
+  </div>
+  <button class="cancel-pending" id="cancelPending">やめる</button>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<div class="history-head">
+  <h2>今週の記録</h2>
+  <span id="weekTotal"></span>
+</div>
+<div class="history" id="history"></div>
+
+<div class="toast" id="toast">
+  <span id="toastMsg"></span>
+  <button id="undoBtn">取消</button>
+</div>
+
+<dialog id="settingsDlg">
+  <h2>設定</h2>
+  <div class="field">
+    <label for="chargeInput">毎週のチャージ額(円)</label>
+    <input type="number" id="chargeInput" inputmode="numeric" step="1000" min="0">
+    <div class="note">毎週日曜の21時以降に、最初に開いたとき自動で追加されます。使い残しは翌週に繰り越されます。</div>
+  </div>
+  <div class="field">
+    <label for="balanceInput">残り予算を手で直す(円)</label>
+    <input type="number" id="balanceInput" inputmode="numeric" step="100">
+    <div class="note">ズレたときの調整用。</div>
+  </div>
+  <div class="dialog-btns">
+    <button class="btn-close" id="closeDlg">閉じる</button>
+    <button class="btn-save" id="saveDlg">保存</button>
+  </div>
+</dialog>
+
+<script>
+(function () {
+  var KEY = "weeklyBudgetApp_v1";
+  var COMMIT_DELAY = 1500;       // 連続タップの待ち時間(ミリ秒)
+  var CHARGE_DOW = 0;            // 日曜
+  var CHARGE_HOUR = 21;          // 21時
+
+  // ===== 状態 =====
+  var state = load();
+
+  function defaultState() {
+    return {
+      balance: 0,
+      charge: 25000,
+      lastBoundary: 0,   // 最後にチャージ処理した境界時刻(ms)
+      history: []        // {t: ms, amt: 円, type: "spend"|"charge"}
+    };
+  }
+
+  function load() {
+    try {
+      var raw = localStorage.getItem(KEY);
+      if (raw) return JSON.parse(raw);
+    } catch (e) {}
+    return null;
+  }
+
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+  }
+
+  // 直近の「日曜21時」(現在時刻以前)を返す
+  function latestBoundary(now) {
+    var d = new Date(now);
+    d.setHours(CHARGE_HOUR, 0, 0, 0);
+    d.setDate(d.getDate() - d.getDay() + CHARGE_DOW);
+    if (d.getTime() > now) d.setDate(d.getDate() - 7);
+    return d.getTime();
+  }
+
+  // 初回起動 or 週またぎチャージ
+  function initOrCharge() {
+    var now = Date.now();
+    var boundary = latestBoundary(now);
+    if (!state) {
+      state = defaultState();
+      state.balance = state.charge;
+      state.lastBoundary = boundary;
+      state.history.push({ t: now, amt: state.charge, type: "charge" });
+      save();
+      return;
+    }
+    // 過ぎた境界の数だけチャージ(週をまたいで開かなくても積み増す)
+    var WEEK = 7 * 24 * 60 * 60 * 1000;
+    var missed = Math.round((boundary - state.lastBoundary) / WEEK);
+    if (missed > 0) {
+      state.balance += state.charge * missed;
+      state.lastBoundary = boundary;
+      state.history.push({ t: now, amt: state.charge * missed, type: "charge" });
+      save();
+    }
+  }
+
+  // ===== 表示 =====
+  var $ = function (id) { return document.getElementById(id); };
+  var yen = function (n) { return "¥" + n.toLocaleString("ja-JP"); };
+
+  function render() {
+    var bal = $("balance");
+    bal.textContent = yen(state.balance);
+    bal.className = "balance " + (state.balance < 0 ? "over" : state.balance < state.charge * 0.2 ? "low" : "ok");
+
+    // 今週分(直近の境界以降)の履歴
+    var boundary = state.lastBoundary;
+    var weekSpend = 0;
+    var items = [];
+    for (var i = state.history.length - 1; i >= 0; i--) {
+      var h = state.history[i];
+      if (h.t >= boundary) {
+        items.push({ idx: i, h: h });
+        if (h.type === "spend") weekSpend += h.amt;
+      }
+    }
+    $("weekTotal").textContent = "使った額 " + yen(weekSpend);
+
+    var next = new Date(boundary + 7 * 24 * 60 * 60 * 1000);
+    $("subInfo").textContent = "次のチャージ: " + (next.getMonth() + 1) + "/" + next.getDate() + "(日) 21:00 に " + yen(state.charge);
+
+    var box = $("history");
+    box.innerHTML = "";
+    if (items.length === 0) {
+      box.innerHTML = '<div class="empty">まだ記録がありません</div>';
+      return;
+    }
+    items.forEach(function (it) {
+      var d = new Date(it.h.t);
+      var when = (d.getMonth() + 1) + "/" + d.getDate() + " " +
+        ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2);
+      var div = document.createElement("div");
+      div.className = "h-item";
+      var isCharge = it.h.type === "charge";
+      div.innerHTML =
+        '<span class="when">' + when + "</span>" +
+        '<span class="amt' + (isCharge ? " charge" : "") + '">' +
+        (isCharge ? "+" : "−") + yen(it.h.amt).slice(1) + "円</span>" +
+        '<button class="del" aria-label="削除">✕</button>';
+      div.querySelector(".del").addEventListener("click", function () {
+        if (!confirm((isCharge ? "チャージ" : "支出") + " " + yen(it.h.amt) + " を削除しますか?")) return;
+        state.history.splice(it.idx, 1);
+        state.balance += isCharge ? -it.h.amt : it.h.amt;
+        save();
+        render();
+      });
+      box.appendChild(div);
+    });
+  }
+
+  // ===== 金額ボタン =====
+  var AMOUNTS = [100, 200, 300, 400, 500, 600, 700, 800, 1000, 2000, 3000, 5000, 10000];
+  var grid = $("grid");
+  AMOUNTS.forEach(function (a, i) {
+    var b = document.createElement("button");
+    // 3列で割り切れず最後に1つ余るときは、横幅いっぱいにして見た目を整える
+    var odd = i === AMOUNTS.length - 1 && AMOUNTS.length % 3 === 1;
+    b.className = "amt-btn" + (odd ? " wide" : "");
+    b.innerHTML = a.toLocaleString() + "<small>円</small>";
+    b.addEventListener("click", function () { addPending(a); });
+    grid.appendChild(b);
+  });
+
+  // ===== 連続タップ合算 → 自動記録 =====
+  var pending = 0;
+  var timer = null;
+  var barAnim = null;
+
+  function addPending(a) {
+    pending += a;
+    $("pendingAmt").textContent = yen(pending);
+    $("pendingWrap").classList.add("show");
+    $("cancelPending").classList.add("show");
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(commit, COMMIT_DELAY);
+    animateBar();
+  }
+
+  function animateBar() {
+    var bar = $("pendingBar");
+    if (barAnim) bar.getAnimations().forEach(function (an) { an.cancel(); });
+    barAnim = bar.animate(
+      [{ width: "0%" }, { width: "100%" }],
+      { duration: COMMIT_DELAY, easing: "linear", fill: "forwards" }
+    );
+  }
+
+  function clearPending() {
+    pending = 0;
+    if (timer) { clearTimeout(timer); timer = null; }
+    $("pendingWrap").classList.remove("show");
+    $("cancelPending").classList.remove("show");
+  }
+
+  $("cancelPending").addEventListener("click", clearPending);
+
+  function commit() {
+    if (pending <= 0) { clearPending(); return; }
+    var amt = pending;
+    state.history.push({ t: Date.now(), amt: amt, type: "spend" });
+    state.balance -= amt;
+    save();
+    clearPending();
+    render();
+    showToast(yen(amt) + " を記録しました");
+  }
+
+  // ===== 取消トースト =====
+  var toastTimer = null;
+  function showToast(msg) {
+    $("toastMsg").textContent = msg;
+    $("toast").classList.add("show");
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { $("toast").classList.remove("show"); }, 5000);
+  }
+
+  $("undoBtn").addEventListener("click", function () {
+    // 直近の支出を取り消す
+    for (var i = state.history.length - 1; i >= 0; i--) {
+      if (state.history[i].type === "spend") {
+        state.balance += state.history[i].amt;
+        state.history.splice(i, 1);
+        break;
+      }
+    }
+    save();
+    $("toast").classList.remove("show");
+    render();
+  });
+
+  // ===== 設定 =====
+  var dlg = $("settingsDlg");
+  $("gearBtn").addEventListener("click", function () {
+    $("chargeInput").value = state.charge;
+    $("balanceInput").value = state.balance;
+    dlg.showModal();
+  });
+  $("closeDlg").addEventListener("click", function () { dlg.close(); });
+  $("saveDlg").addEventListener("click", function () {
+    var c = parseInt($("chargeInput").value, 10);
+    var b = parseInt($("balanceInput").value, 10);
+    if (!isNaN(c) && c >= 0) state.charge = c;
+    if (!isNaN(b)) state.balance = b;
+    save();
+    dlg.close();
+    render();
+  });
+
+  // ===== 起動 =====
+  initOrCharge();
+  render();
+
+  // アプリを開きっぱなしで日曜21時をまたいだ場合にも対応
+  document.addEventListener("visibilitychange", function () {
+    if (!document.hidden) { initOrCharge(); render(); }
+  });
+})();
+</script>
+</body>
+</html>
