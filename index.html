@@ -38,28 +38,26 @@
   .balance-card {
     background: var(--card);
     border-radius: var(--radius);
-    padding: 22px 20px 20px;
+    padding: 18px 20px 22px;
     text-align: center;
     position: relative;
-    overflow: hidden;
   }
   .balance-label { font-size: 13px; color: var(--muted); }
   /* 予算の数字を置く行。入力中の合計をこの上に重ねて出すため相対配置にする */
   .balance-row {
     position: relative;
-    min-height: 56px;
+    min-height: 60px;
     display: flex;
     align-items: center;
     justify-content: center;
-    margin: 2px 0;
+    margin: 3px 0;
   }
   .balance {
-    font-size: 44px;
+    font-size: 42px;
     font-weight: 700;
-    line-height: 1.25;
+    line-height: 1.35;
     font-variant-numeric: tabular-nums;
     letter-spacing: -0.5px;
-    padding: 2px 0;
   }
   .balance.ok { color: var(--good); }
   .balance.low { color: var(--warn); }
@@ -99,12 +97,15 @@
     font-weight: 600;
     font-size: 13px;
   }
+  /* 進捗バー: 角の内側に収めて拡大する方式(カードに overflow:hidden を掛けない) */
   .pending-bar {
     position: absolute;
-    bottom: 0; left: 0;
+    bottom: 6px; left: 12px; right: 12px;
     height: 4px;
     background: var(--accent);
-    width: 0%;
+    border-radius: 2px;
+    transform: scaleX(0);
+    transform-origin: left center;
   }
   .cancel-pending {
     position: absolute; top: 12px; left: 12px;
@@ -139,7 +140,7 @@
   .amt-btn.span2 { grid-column: span 2; }
   .amt-btn.span3 { grid-column: 1 / -1; }
   /* よく使う額(100〜500)は押しやすく背を高く、あまり使わない額(5,000/10,000)は低く */
-  .amt-btn.tall { padding: 28px 0; }
+  .amt-btn.tall { padding: 24px 0; }
   .amt-btn.short { padding: 9px 0; font-size: 19px; }
   .amt-btn.short small { font-size: 12px; }
 
@@ -435,7 +436,7 @@
     var bar = $("pendingBar");
     bar.getAnimations().forEach(function (an) { an.cancel(); });
     bar.animate(
-      [{ width: "0%" }, { width: "100%" }],
+      [{ transform: "scaleX(0)" }, { transform: "scaleX(1)" }],
       { duration: COMMIT_DELAY, easing: "linear", fill: "forwards" }
     );
   }
@@ -448,7 +449,7 @@
     $("subInfo").classList.remove("pending");
     var bar = $("pendingBar");
     bar.getAnimations().forEach(function (an) { an.cancel(); });
-    bar.style.width = "0%";
+    bar.style.transform = "scaleX(0)";
   }
 
   // やめる → 待機を取り消して残り予算欄を元の表示に戻す
