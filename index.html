@@ -38,22 +38,54 @@
   .balance-card {
     background: var(--card);
     border-radius: var(--radius);
-    padding: 18px 20px 16px;
+    padding: 22px 20px 20px;
     text-align: center;
     position: relative;
     overflow: hidden;
   }
   .balance-label { font-size: 13px; color: var(--muted); }
+  /* 予算の数字を置く行。入力中の合計をこの上に重ねて出すため相対配置にする */
+  .balance-row {
+    position: relative;
+    min-height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 2px 0;
+  }
   .balance {
     font-size: 44px;
     font-weight: 700;
-    line-height: 1.2;
+    line-height: 1.25;
     font-variant-numeric: tabular-nums;
     letter-spacing: -0.5px;
+    padding: 2px 0;
   }
   .balance.ok { color: var(--good); }
   .balance.low { color: var(--warn); }
   .balance.over { color: var(--bad); }
+  /* 入力中は予算の数字を薄くして、合計を上に重ねる */
+  .balance-row.pending .balance { opacity: 0.28; }
+  .pending-overlay {
+    position: absolute;
+    left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+    pointer-events: none;
+  }
+  .balance-row.pending .pending-overlay { display: flex; }
+  .pending-overlay .po-amt {
+    font-size: 40px;
+    font-weight: 700;
+    color: var(--accent);
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.5px;
+  }
+  .pending-overlay .po-tag { font-size: 11px; color: var(--accent); font-weight: 600; }
   .sub-info { font-size: 12px; color: var(--muted); margin-top: 2px; }
   .gear {
     position: absolute; top: 12px; right: 12px;
@@ -106,6 +138,10 @@
   .amt-btn small { font-size: 13px; color: var(--muted); font-weight: 400; }
   .amt-btn.span2 { grid-column: span 2; }
   .amt-btn.span3 { grid-column: 1 / -1; }
+  /* よく使う額(100〜500)は押しやすく背を高く、あまり使わない額(5,000/10,000)は低く */
+  .amt-btn.tall { padding: 28px 0; }
+  .amt-btn.short { padding: 9px 0; font-size: 19px; }
+  .amt-btn.short small { font-size: 12px; }
 
   /* ===== 取消トースト ===== */
   .toast {
@@ -191,7 +227,13 @@
 
 <div class="balance-card">
   <div class="balance-label">残り予算</div>
-  <div class="balance ok" id="balance">¥25,000</div>
+  <div class="balance-row" id="balanceRow">
+    <div class="balance ok" id="balance">¥25,000</div>
+    <div class="pending-overlay" id="pendingOverlay">
+      <div class="po-amt" id="pendingAmt">¥0</div>
+      <div class="po-tag">足し中(まもなく記録)</div>
+    </div>
+  </div>
   <div class="sub-info" id="subInfo"></div>
   <button class="gear" id="gearBtn" aria-label="設定">⚙︎</button>
   <button class="cancel-pending" id="cancelPending">やめる</button>
@@ -348,18 +390,23 @@
 
   // ===== 金額ボタン =====
   // span: 2=2ボタン幅、3=1行いっぱい(未指定は通常の1マス)
+  // size: tall=背を高く(よく使う) / short=背を低く(あまり使わない)
   var LAYOUT = [
-    { a: 100 }, { a: 200 }, { a: 300 },      // 1段目
-    { a: 400 }, { a: 500, span: 2 },         // 2段目(500を2ボタン幅に)
-    { a: 1000, span: 3 },                    // 3段目
-    { a: 2000 }, { a: 3000 }, { a: 4000 },   // 4段目
-    { a: 5000, span: 3 },                    // 5段目
-    { a: 10000, span: 3 }                    // 6段目
+    { a: 100, size: "tall" }, { a: 200, size: "tall" }, { a: 300, size: "tall" },  // 1段目
+    { a: 400, size: "tall" }, { a: 500, span: 2, size: "tall" },                   // 2段目(500を2ボタン幅に)
+    { a: 1000, span: 3 },                                                          // 3段目
+    { a: 2000 }, { a: 3000 }, { a: 4000 },                                         // 4段目
+    { a: 5000, span: 3, size: "short" },                                           // 5段目
+    { a: 10000, span: 3, size: "short" }                                           // 6段目
   ];
   var grid = $("grid");
   LAYOUT.forEach(function (item) {
     var b = document.createElement("button");
-    b.className = "amt-btn" + (item.span === 2 ? " span2" : item.span === 3 ? " span3" : "");
+    var cls = "amt-btn";
+    if (item.span === 2) cls += " span2";
+    else if (item.span === 3) cls += " span3";
+    if (item.size) cls += " " + item.size;
+    b.className = cls;
     b.innerHTML = item.a.toLocaleString() + "<small>円</small>";
     b.addEventListener("click", function () { addPending(item.a); });
     grid.appendChild(b);
@@ -373,8 +420,11 @@
 
   function addPending(a) {
     pending += a;
+    // 合計額を残り予算の数字に重ねて表示
+    $("pendingAmt").textContent = yen(pending);
+    $("balanceRow").classList.add("pending");
     $("subInfo").classList.add("pending");
-    $("subInfo").textContent = "まもなく " + yen(pending) + " を記録(タップで合算)";
+    $("subInfo").textContent = "もう一度押すと合算 · 1.5秒で自動記録";
     $("cancelPending").classList.add("show");
     if (timer) clearTimeout(timer);
     timer = setTimeout(commit, COMMIT_DELAY);
@@ -394,6 +444,7 @@
     pending = 0;
     if (timer) { clearTimeout(timer); timer = null; }
     $("cancelPending").classList.remove("show");
+    $("balanceRow").classList.remove("pending");
     $("subInfo").classList.remove("pending");
     var bar = $("pendingBar");
     bar.getAnimations().forEach(function (an) { an.cancel(); });
